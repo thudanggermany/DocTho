@@ -42,6 +42,7 @@ export default async function handler(req, res) {
         const genAI = new GoogleGenerativeAI(apiKey);
         
         // Diagnostic: Check for getGenerativeModel
+        console.log("[API/CHAT] SDK API Key check (masked):", apiKey ? apiKey.substring(0, 6) + "..." : "EMPTY");
         console.log("[API/CHAT] genAI properties:", Object.keys(genAI));
         if (typeof genAI.getGenerativeModel !== 'function') {
             console.error("[API/CHAT] CRITICAL: getGenerativeModel is NOT a function on genAI!");
@@ -50,6 +51,8 @@ export default async function handler(req, res) {
             console.error("[API/CHAT] genAI prototype methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(genAI)));
             throw new Error("SDK Initialization Error: getGenerativeModel is missing. Please check library version.");
         }
+
+        const langNames = {
             'vi': 'Vietnamese',
             'de': 'German',
             'en': 'English'
