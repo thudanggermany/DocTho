@@ -3,138 +3,119 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Deployment Marker: v4.0 (Robust Fallback System)
-console.log("[API/CHAT] Initializing DocTho Backend v4.0 with Fallback Support...");
+// Deployment Marker: v5.0 (Deep Diagnostic & Ultra-Stable Fallback)
+console.log("[API/CHAT] v5.0 Starting Deep Diagnostic Mode...");
 
 import * as GoogleAI from "@google/generative-ai";
-
 const GoogleGenerativeAI = GoogleAI.GoogleGenerativeAI;
 
 export default async function DocThoHandler(req, res) {
-    // Robust API key retrieval (Trying all common names)
-    const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    // ---------------------------------------------------------
+    // DIAGNOSTIC 1: API KEY ANALYSIS
+    // ---------------------------------------------------------
+    const rawKey = process.env.API_KEY || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    const apiKey = rawKey ? rawKey.trim() : null;
 
     if (req.method === 'GET') {
-        return res.status(200).json({ 
-            status: 'ok', 
-            version: '4.0',
-            apiConnected: !!apiKey 
-        });
+        const keyStatus = apiKey ? `FOUND (Len: ${apiKey.length}, Start: ${apiKey.substring(0, 4)}... End: ...${apiKey.slice(-4)})` : "NOT FOUND";
+        console.log(`[API/CHAT] Health Check. API Key Status: ${keyStatus}`);
+        return res.status(200).json({ status: 'ok', version: '5.0', keyStatus });
     }
 
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method Not Allowed' });
-    }
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-    console.log("[API/CHAT] v4.0 Request Received.");
+    console.log(`[API/CHAT] POST Request. API Key check: ${apiKey ? 'PRESENT' : 'MISSING'}`);
+    
+    if (!apiKey) {
+        return res.status(401).json({ error: "API Key is missing on Vercel. Please check ENVIRONMENT VARIABLES." });
+    }
 
     try {
-        const { text, selectedLang, voiceCount, selectedVoiceIds, selectedConfigs, isPoetryVoice } = req.body;
-
-        if (!text || !apiKey) {
-            return res.status(400).json({ error: 'Missing Required Fields (text or API key)' });
-        }
+        const { text, selectedLang, voiceCount, selectedConfigs } = req.body;
+        if (!text) return res.status(400).json({ error: 'Text is required' });
 
         const genAI = new GoogleGenerativeAI(apiKey);
         const langNames = { 'vi': 'Vietnamese', 'de': 'German', 'en': 'English' };
         const targetLang = langNames[selectedLang] || 'Vietnamese';
-        let textToRead = text.trim();
 
         // ---------------------------------------------------------
-        // STEP 1: TRANSLATION / SCRIPTING (with Fallbacks)
+        // STEP 1: TRANSLATION (Ultra-Robust Loop)
         // ---------------------------------------------------------
-        console.log(`[API/CHAT] Step 1: Starting Translation/Scripting...`);
+        const translationPrompt = `Translate the following to ${targetLang}. Return ONLY translated text: ${text.trim()}`;
         
-        let translationPrompt = `You are a professional translator. 
-        Target Language: ${targetLang}
-        Task: Translate the following text to ${targetLang} (if not already ${targetLang}). Return ONLY the translated text.
-        Input Text: ${text.trim()}`;
+        const models = ["gemini-1.5-flash", "models/gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro", "gemini-1.0-pro"];
+        const versions = ["v1beta", "v1"];
         
-        if (voiceCount > 1) {
-            translationPrompt = `Format the following text as a ${targetLang} conversation between ${voiceCount} speakers named Speaker 1, Speaker 2, etc. Format: Speaker X: [text]. 
-            Input Text: ${text.trim()}`;
-        }
+        let translatedText = text.trim();
+        let step1Success = false;
 
-        const translationModelsToTry = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro", "gemini-1.0-pro"];
-        let translationSuccess = false;
+        console.log("[API/CHAT] Step 1: Starting Ultra-Robust Translation...");
 
-        for (const modelName of translationModelsToTry) {
-            try {
-                console.log(`[API/CHAT] Attempting translation with ${modelName}...`);
-                const model = genAI.getGenerativeModel({ model: modelName }, { apiVersion: "v1beta" });
-                const result = await model.generateContent(translationPrompt);
-                textToRead = result.response.text().trim();
-                translationSuccess = true;
-                console.log(`[API/CHAT] Success with ${modelName}!`);
-                break;
-            } catch (err) {
-                console.warn(`[API/CHAT] ${modelName} failed or not found. Error: ${err.message}`);
-                continue;
+        outer: for (const ver of versions) {
+            for (const name of models) {
+                try {
+                    console.log(`[API/CHAT] Trying ${name} on ${ver}...`);
+                    const model = genAI.getGenerativeModel({ model: name }, { apiVersion: ver });
+                    const result = await model.generateContent(translationPrompt);
+                    translatedText = result.response.text().trim();
+                    step1Success = true;
+                    console.log(`[API/CHAT] SUCCESS with ${name} (${ver})`);
+                    break outer;
+                } catch (err) {
+                    // console.warn(`[API/CHAT] ${name} (${ver}) failed: ${err.message}`);
+                }
             }
         }
 
-        if (!translationSuccess) throw new Error("All translation models failed. Check API Key and Quota.");
+        if (!step1Success) throw new Error("CRITICAL: All translation model combinations failed. This strongly suggests an invalid API Key or project restriction.");
 
         // ---------------------------------------------------------
-        // STEP 2: TTS GENERATION (with Fallbacks)
+        // STEP 2: TTS (Ultra-Robust Loop)
         // ---------------------------------------------------------
-        console.log(`[API/CHAT] Step 2: Starting TTS Generation...`);
-
-        const ttsModelsToTry = ["gemini-2.0-flash", "gemini-2.0-flash-exp"];
-        let ttsSuccess = false;
+        console.log("[API/CHAT] Step 2: Starting Ultra-Robust TTS...");
+        
+        const ttsModels = ["gemini-2.0-flash", "models/gemini-2.0-flash", "gemini-2.0-flash-exp"];
+        let step2Success = false;
         let audioData = null;
         let mimeType = null;
 
-        let promptText = `Read following ${targetLang} ${isPoetryVoice ? 'poetry' : 'text'}: ${textToRead}`;
-        let generationConfig = {
+        const generationConfig = {
             responseModalities: ["AUDIO"],
             speechConfig: {
-                voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedConfigs[0].base } },
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedConfigs[0]?.base || "Chime" } },
             },
         };
 
-        if (voiceCount > 1) {
-            const effectiveConfigs = selectedConfigs.slice(0, 2);
-            promptText = `Read conversation: ${textToRead}`;
-            generationConfig.speechConfig = {
-                multiSpeakerVoiceConfig: {
-                    speakerVoiceConfigs: effectiveConfigs.map((config, i) => ({
-                        speaker: `Speaker ${i + 1}`,
-                        voiceConfig: { prebuiltVoiceConfig: { voiceName: config.base } }
-                    }))
+        outerTTS: for (const ver of versions) {
+            for (const name of ttsModels) {
+                try {
+                    console.log(`[API/CHAT] Trying TTS with ${name} on ${ver}...`);
+                    const model = genAI.getGenerativeModel({ model: name, generationConfig }, { apiVersion: ver });
+                    const result = await model.generateContent(`Read this Vietnamese text: ${translatedText}`);
+                    const part = result.response.candidates[0].content.parts.find(p => p.inlineData?.data);
+                    if (part) {
+                        audioData = part.inlineData.data;
+                        mimeType = part.inlineData.mimeType;
+                        step2Success = true;
+                        console.log(`[API/CHAT] TTS SUCCESS with ${name} (${ver})`);
+                        break outerTTS;
+                    }
+                } catch (err) {
+                    // console.warn(`[API/CHAT] TTS ${name} (${ver}) failed: ${err.message}`);
                 }
-            };
-        }
-
-        for (const modelName of ttsModelsToTry) {
-            try {
-                console.log(`[API/CHAT] Attempting TTS with ${modelName}...`);
-                const model = genAI.getGenerativeModel({ model: modelName, generationConfig }, { apiVersion: "v1beta" });
-                const result = await model.generateContent(promptText);
-                const audioPart = result.response.candidates[0].content.parts.find(p => p.inlineData?.data);
-                if (audioPart) {
-                    audioData = audioPart.inlineData.data;
-                    mimeType = audioPart.inlineData.mimeType;
-                    ttsSuccess = true;
-                    console.log(`[API/CHAT] TTS Success with ${modelName}!`);
-                    break;
-                }
-            } catch (err) {
-                console.warn(`[API/CHAT] TTS ${modelName} failed. Error: ${err.message}`);
-                continue;
             }
         }
 
-        if (!ttsSuccess) throw new Error("TTS Generation failed on all available models.");
+        if (!step2Success) throw new Error("CRITICAL: All TTS model combinations failed.");
 
         return res.status(200).json({
-            text: textToRead,
+            text: translatedText,
             audioData: audioData,
             mimeType: mimeType
         });
 
     } catch (error) {
         console.error('[API/CHAT] FATAL ERROR:', error);
-        return res.status(500).json({ error: error.message || 'Internal Server Error' });
+        return res.status(500).json({ error: `Server Error: ${error.message}` });
     }
 }
