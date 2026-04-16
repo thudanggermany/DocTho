@@ -92,7 +92,11 @@ export default async function DocThoHandler(req, res) {
             throw new Error("SDK Method getGenerativeModel not found. This usually indicates an incorrect SDK version or import issue.");
         }
 
-        const translationModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        console.log(`[API/CHAT] Step 1: Translating to ${targetLang} (using v1)...`);
+        const translationModel = genAI.getGenerativeModel(
+            { model: "gemini-1.5-flash-latest" },
+            { apiVersion: "v1" }
+        );
         const translationResult = await translationModel.generateContent(translationPrompt);
         textToRead = translationResult.response.text().trim();
         console.log("[API/CHAT] Translation complete.");
@@ -134,8 +138,11 @@ export default async function DocThoHandler(req, res) {
             };
         }
 
-        console.log(`[API/CHAT] Step 2: Generating Audio with ${ttsModelName}...`);
-        const ttsModel = genAI.getGenerativeModel({ model: ttsModelName, generationConfig });
+        console.log(`[API/CHAT] Step 2: Generating Audio with ${ttsModelName} (using v1beta)...`);
+        const ttsModel = genAI.getGenerativeModel(
+            { model: ttsModelName, generationConfig },
+            { apiVersion: "v1beta" }
+        );
         const ttsResult = await ttsModel.generateContent(promptText);
         const ttsResponse = ttsResult.response;
         const audioPart = ttsResponse.candidates[0].content.parts.find(p => p.inlineData?.data);
