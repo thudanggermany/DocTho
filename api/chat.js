@@ -3,79 +3,89 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Deployment Marker: v5.0 (Deep Diagnostic & Ultra-Stable Fallback)
-console.log("[API/CHAT] v5.0 Starting Deep Diagnostic Mode...");
+// Deployment Marker: v6.0 (Raw Fetch Implementation)
+console.log("[API/CHAT] v6.0 Initializing with RAW FETCH for maximum reliability...");
 
 import * as GoogleAI from "@google/generative-ai";
 const GoogleGenerativeAI = GoogleAI.GoogleGenerativeAI;
 
+/**
+ * Robust Raw Fetch to bypass SDK issues and get deep error logs
+ */
+async function fetchGemini(model, version, key, prompt) {
+    const url = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${key}`;
+    console.log(`[API/CHAT] Fetching: ${version}/models/${model}`);
+    
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+        })
+    });
+
+    if (!response.ok) {
+        const errorBody = await response.text();
+        console.error(`[API/CHAT] Google API ERROR (${response.status}):`, errorBody);
+        throw new Error(`Google API Error ${response.status}: ${errorBody}`);
+    }
+
+    const data = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+}
+
 export default async function DocThoHandler(req, res) {
-    // ---------------------------------------------------------
-    // DIAGNOSTIC 1: API KEY ANALYSIS
-    // ---------------------------------------------------------
     const rawKey = process.env.API_KEY || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
     const apiKey = rawKey ? rawKey.trim() : null;
 
     if (req.method === 'GET') {
-        const keyStatus = apiKey ? `FOUND (Len: ${apiKey.length}, Start: ${apiKey.substring(0, 4)}... End: ...${apiKey.slice(-4)})` : "NOT FOUND";
-        console.log(`[API/CHAT] Health Check. API Key Status: ${keyStatus}`);
-        return res.status(200).json({ status: 'ok', version: '5.0', keyStatus });
+        const keyStatus = apiKey ? `FOUND (Len: ${apiKey.length}, ${apiKey.substring(0, 4)}...${apiKey.slice(-4)})` : "NOT FOUND";
+        return res.status(200).json({ status: 'ok', version: '6.0', keyStatus });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-    console.log(`[API/CHAT] POST Request. API Key check: ${apiKey ? 'PRESENT' : 'MISSING'}`);
+    console.log(`[API/CHAT] v6.0 Started. Key Check: ${apiKey ? 'OK' : 'MISSING'}`);
     
     if (!apiKey) {
         return res.status(401).json({ error: "API Key is missing on Vercel. Please check ENVIRONMENT VARIABLES." });
     }
 
     try {
-        const { text, selectedLang, voiceCount, selectedConfigs } = req.body;
+        const { text, selectedLang, selectedConfigs } = req.body;
         if (!text) return res.status(400).json({ error: 'Text is required' });
 
-        const genAI = new GoogleGenerativeAI(apiKey);
         const langNames = { 'vi': 'Vietnamese', 'de': 'German', 'en': 'English' };
         const targetLang = langNames[selectedLang] || 'Vietnamese';
 
         // ---------------------------------------------------------
-        // STEP 1: TRANSLATION (Ultra-Robust Loop)
+        // STEP 1: TRANSLATION (RAW FETCH)
         // ---------------------------------------------------------
-        const translationPrompt = `Translate the following to ${targetLang}. Return ONLY translated text: ${text.trim()}`;
-        
-        const models = ["gemini-1.5-flash", "models/gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro", "gemini-1.0-pro"];
-        const versions = ["v1beta", "v1"];
-        
+        const translationPrompt = `Translate to ${targetLang}. Return ONLY translated text: ${text.trim()}`;
         let translatedText = text.trim();
-        let step1Success = false;
-
-        console.log("[API/CHAT] Step 1: Starting Ultra-Robust Translation...");
-
-        outer: for (const ver of versions) {
-            for (const name of models) {
-                try {
-                    console.log(`[API/CHAT] Trying ${name} on ${ver}...`);
-                    const model = genAI.getGenerativeModel({ model: name }, { apiVersion: ver });
-                    const result = await model.generateContent(translationPrompt);
-                    translatedText = result.response.text().trim();
-                    step1Success = true;
-                    console.log(`[API/CHAT] SUCCESS with ${name} (${ver})`);
-                    break outer;
-                } catch (err) {
-                    // console.warn(`[API/CHAT] ${name} (${ver}) failed: ${err.message}`);
-                }
+        
+        try {
+            // Attempting the most stable path first
+            translatedText = await fetchGemini("gemini-1.5-flash", "v1beta", apiKey, translationPrompt);
+            console.log("[API/CHAT] Step 1 SUCCESS.");
+        } catch (err) {
+            console.warn("[API/CHAT] Step 1 Primary failed. Attempting fallback gemini-1.0-pro...");
+            try {
+                translatedText = await fetchGemini("gemini-1.0-pro", "v1beta", apiKey, translationPrompt);
+                console.log("[API/CHAT] Step 1 Fallback SUCCESS.");
+            } catch (err2) {
+                // Return original text if translation completely fails, rather than crashing
+                console.error("[API/CHAT] CRITICAL: Translation failed completely. Using original text.");
+                translatedText = text.trim();
             }
         }
 
-        if (!step1Success) throw new Error("CRITICAL: All translation model combinations failed. This strongly suggests an invalid API Key or project restriction.");
-
         // ---------------------------------------------------------
-        // STEP 2: TTS (Ultra-Robust Loop)
+        // STEP 2: TTS (SDK)
         // ---------------------------------------------------------
-        console.log("[API/CHAT] Step 2: Starting Ultra-Robust TTS...");
+        console.log("[API/CHAT] Step 2: TTS with SDK...");
+        const genAI = new GoogleGenerativeAI(apiKey);
         
-        const ttsModels = ["gemini-2.0-flash", "models/gemini-2.0-flash", "gemini-2.0-flash-exp"];
-        let step2Success = false;
         let audioData = null;
         let mimeType = null;
 
@@ -86,27 +96,20 @@ export default async function DocThoHandler(req, res) {
             },
         };
 
-        outerTTS: for (const ver of versions) {
-            for (const name of ttsModels) {
-                try {
-                    console.log(`[API/CHAT] Trying TTS with ${name} on ${ver}...`);
-                    const model = genAI.getGenerativeModel({ model: name, generationConfig }, { apiVersion: ver });
-                    const result = await model.generateContent(`Read this Vietnamese text: ${translatedText}`);
-                    const part = result.response.candidates[0].content.parts.find(p => p.inlineData?.data);
-                    if (part) {
-                        audioData = part.inlineData.data;
-                        mimeType = part.inlineData.mimeType;
-                        step2Success = true;
-                        console.log(`[API/CHAT] TTS SUCCESS with ${name} (${ver})`);
-                        break outerTTS;
-                    }
-                } catch (err) {
-                    // console.warn(`[API/CHAT] TTS ${name} (${ver}) failed: ${err.message}`);
-                }
+        try {
+            // Using v1beta for TTS as it supports multimodal audio
+            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash", generationConfig }, { apiVersion: "v1beta" });
+            const result = await model.generateContent(`Read this text: ${translatedText}`);
+            const part = result.response.candidates[0].content.parts.find(p => p.inlineData?.data);
+            if (part) {
+                audioData = part.inlineData.data;
+                mimeType = part.inlineData.mimeType;
+                console.log("[API/CHAT] Step 2 SUCCESS.");
             }
+        } catch (err) {
+            console.error("[API/CHAT] Step 2 FAILED:", err.message);
+            throw new Error(`TTS Failed: ${err.message}`);
         }
-
-        if (!step2Success) throw new Error("CRITICAL: All TTS model combinations failed.");
 
         return res.status(200).json({
             text: translatedText,
@@ -115,7 +118,7 @@ export default async function DocThoHandler(req, res) {
         });
 
     } catch (error) {
-        console.error('[API/CHAT] FATAL ERROR:', error);
+        console.error('[API/CHAT] [v6.0] FATAL:', error);
         return res.status(500).json({ error: `Server Error: ${error.message}` });
     }
 }
