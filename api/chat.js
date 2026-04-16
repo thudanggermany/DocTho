@@ -11,7 +11,8 @@ import * as GoogleAI from "@google/generative-ai";
 const GoogleGenerativeAI = GoogleAI.GoogleGenerativeAI;
 
 export default async function DocThoHandler(req, res) {
-    const apiKey = process.env.VITE_GEMINI_API_KEY;
+    // Robust API key retrieval (Trying all common names)
+    const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
     if (req.method === 'GET') {
         return res.status(200).json({ 
