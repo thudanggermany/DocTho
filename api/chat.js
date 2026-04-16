@@ -20,14 +20,19 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
+    // DEBUG: Log incoming request body
+    console.log("[API/CHAT] Incoming POST request. Body:", JSON.stringify(req.body));
+
     try {
         const { text, selectedLang, voiceCount, selectedVoiceIds, selectedConfigs, isPoetryVoice } = req.body;
 
         if (!text) {
+            console.warn("[API/CHAT] Missing text in request body.");
             return res.status(400).json({ error: 'Text is required' });
         }
 
         if (!apiKey) {
+            console.error("[API/CHAT] VITE_GEMINI_API_KEY is missing from environment.");
             return res.status(500).json({ error: 'VITE_GEMINI_API_KEY is not defined in the environment.' });
         }
 
@@ -43,6 +48,7 @@ export default async function handler(req, res) {
         let textToRead = text.trim();
 
         // Step 1: Translate / Script
+        console.log(`[API/CHAT] Step 1: Translating to ${targetLang}...`);
         let translationPrompt = `You are a professional translator. 
         Target Language: ${targetLang}
         
@@ -72,12 +78,11 @@ export default async function handler(req, res) {
         const translationModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const translationResponse = await translationModel.generateContent(translationPrompt);
         textToRead = translationResponse.response.text().trim();
+        console.log("[API/CHAT] Translation/Scripting complete.");
 
         // Step 2: Generate TTS
-        // Note: Using stable model name
         const ttsModelName = "gemini-2.0-flash-exp"; 
-        const model = genAI.getGenerativeModel({ model: ttsModelName });
-
+        
         let promptText = `Read the following ${targetLang} ${isPoetryVoice ? 'poetry' : 'text'} clearly: ${textToRead}`;
         if (isPoetryVoice) {
             promptText = `Read the following ${targetLang} poetry with a rhythmic, emotional, and soul-stirring tone: ${textToRead}`;
@@ -112,23 +117,28 @@ export default async function handler(req, res) {
             };
         }
 
-        const model = genAI.getGenerativeModel({ model: ttsModelName, generationConfig });
-        const result = await model.generateContent(promptText);
+        console.log(`[API/CHAT] Step 2: Generating Audio with model ${ttsModelName}...`);
+        const ttsModel = genAI.getGenerativeModel({ model: ttsModelName, generationConfig });
+        const result = await ttsModel.generateContent(promptText);
         const response = result.response;
         const audioPart = response.candidates[0].content.parts.find(p => p.inlineData?.data);
         
         if (audioPart) {
+            console.log("[API/CHAT] Audio generated successfully.");
             return res.status(200).json({
                 text: textToRead,
                 audioData: audioPart.inlineData.data,
                 mimeType: audioPart.inlineData.mimeType
             });
         } else {
+            console.error("[API/CHAT] No audio data found in AI response.");
             return res.status(500).json({ error: 'Failed to generate audio content' });
         }
 
     } catch (error) {
-        console.error('API Error:', error);
-        return res.status(500).json({ error: error.message });
+        // DETAILED ERROR LOGGING
+        console.error('[API/CHAT] DETAILED ERROR:', error);
+        console.error('[API/CHAT] Error Stack:', error.stack);
+        return res.status(500).json({ error: error.message || 'Unknown Server Error' });
     }
 }
