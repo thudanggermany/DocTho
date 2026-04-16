@@ -22,7 +22,6 @@ export default defineConfig(({mode}) => {
           manualChunks: {
             'vendor-react': ['react', 'react-dom'],
             'vendor-icons': ['lucide-react'],
-            'vendor-ai': ['@google/genai'],
             'vendor-motion': ['motion/react'],
           },
         },
