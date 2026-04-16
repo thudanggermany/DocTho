@@ -3,11 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Deployment Marker: v11.0 (AI Studio Multi-Stage Fallback)
+// Deployment Marker: v12.0 (Official Library Integration)
 // Target Endpoint: /api/speak
-console.log("[API/SPEAK] v11.0 (ULTRA-STABLE) Initializing...");
+console.log("[API/SPEAK] v12.0 (OFFICIAL LIBRARY) Initializing...");
 
 import * as GoogleAI from "@google/generative-ai";
+import { TextToSpeechClient } from "@google-cloud/text-to-speech";
+
 const GoogleGenerativeAI = GoogleAI.GoogleGenerativeAI;
 
 /**
@@ -36,7 +38,7 @@ async function fetchGeminiTranslation(model, version, key, prompt) {
  */
 async function fetchTranslateTTSFallback(text, lang) {
     console.log(`[API/SPEAK] Triggering Google Translate TTS Fallback for: ${lang}`);
-    const encodedText = encodeURIComponent(text.substring(0, 200)); // Limit length for stability
+    const encodedText = encodeURIComponent(text.substring(0, 200));
     const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=${lang}&client=tw-ob`;
     
     const response = await fetch(url, {
@@ -54,14 +56,15 @@ async function fetchTranslateTTSFallback(text, lang) {
 
 export default async function DocThoSpeakHandler(req, res) {
     const geminiKey = process.env.API_KEY || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    const ttsKey = process.env.GOOGLE_TTS_API_KEY;
 
     if (req.method === 'GET') {
-        return res.status(200).json({ status: 'ok', version: '11.0', keyDetected: !!geminiKey });
+        return res.status(200).json({ status: 'ok', version: '12.0', keyDetected: !!geminiKey });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-    console.log(`[API/SPEAK] v11.1 Refresh Started.`);
+    console.log(`[API/SPEAK] v12.0 Execution Started.`);
     
     if (!geminiKey) {
         return res.status(401).json({ error: "Gemini API Key missing." });
@@ -82,62 +85,78 @@ export default async function DocThoSpeakHandler(req, res) {
         
         try {
             translatedText = await fetchGeminiTranslation("gemini-1.5-flash", "v1beta", geminiKey, translationPrompt);
-            console.log("[API/SPEAK] Translation OK.");
+            console.log("[API/SPEAK] v12.0 Translation OK.");
         } catch (err) {
-            console.warn("[API/SPEAK] Translation failed, using original.");
+            console.warn("[API/SPEAK] v12.0 Translation failed, using original.");
             translatedText = text.trim();
         }
 
         // ---------------------------------------------------------
-        // STEP 2: TTS (GEMINI AUDIO with FALLBACK)
+        // STEP 2: TTS (OFFICIAL LIBRARY with FALLBACK)
         // ---------------------------------------------------------
         let audioData = null;
         let mimeType = null;
         let ttsSuccess = false;
 
-        const genAI = new GoogleGenerativeAI(geminiKey);
-        const generationConfig = {
-            responseModalities: ["AUDIO"],
-            speechConfig: {
-                voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedConfigs[0]?.base || "Chime" } },
-            },
-        };
-
-        // Try Gemini Audio first (The Soulful Way)
-        const ttsModels = ["gemini-1.5-flash-8b", "gemini-1.5-flash"];
-        for (const modelName of ttsModels) {
+        // Try Official Library if Key is present
+        if (ttsKey) {
             try {
-                console.log(`[API/SPEAK] Trying Gemini Audio with ${modelName}...`);
-                const model = genAI.getGenerativeModel({ model: modelName, generationConfig }, { apiVersion: "v1beta" });
+                console.log("[API/SPEAK] v12.0 Trying Official Google TTS Library...");
+                const client = new TextToSpeechClient({ apiKey: ttsKey });
+                const [result] = await client.synthesizeSpeech({
+                    input: { text: translatedText },
+                    voice: { languageCode: selectedLang === 'vi' ? 'vi-VN' : (selectedLang === 'de' ? 'de-DE' : 'en-US'), ssmlGender: 'NEUTRAL' },
+                    audioConfig: { audioEncoding: 'MP3' },
+                });
+                audioData = result.audioContent.toString('base64');
+                mimeType = 'audio/mpeg';
+                ttsSuccess = true;
+                console.log("[API/SPEAK] v12.0 Official Library Success.");
+            } catch (err) {
+                console.warn("[API/SPEAK] v12.0 Official Library failed:", err.message);
+            }
+        }
+
+        // Try Gemini Audio Fallback
+        if (!ttsSuccess) {
+            console.log("[API/SPEAK] v12.0 Trying Gemini Audio Fallback...");
+            const genAI = new GoogleGenerativeAI(geminiKey);
+            const model = genAI.getGenerativeModel({ 
+                model: "gemini-1.5-flash-8b", 
+                generationConfig: { 
+                    responseModalities: ["AUDIO"],
+                    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedConfigs[0]?.base || "Chime" } } }
+                } 
+            }, { apiVersion: "v1beta" });
+            
+            try {
                 const result = await model.generateContent(`Read this: ${translatedText}`);
                 const part = result.response.candidates[0].content.parts.find(p => p.inlineData?.data);
                 if (part) {
                     audioData = part.inlineData.data;
                     mimeType = part.inlineData.mimeType;
                     ttsSuccess = true;
-                    console.log(`[API/SPEAK] Gemini Audio Success: ${modelName}`);
-                    break;
+                    console.log("[API/SPEAK] v12.0 Gemini Audio Success.");
                 }
             } catch (err) {
-                console.warn(`[API/SPEAK] Gemini Audio ${modelName} failed: ${err.message}`);
-                continue;
+                console.warn("[API/SPEAK] v12.0 Gemini Audio failed.");
             }
         }
 
-        // LAST RESORT: Google Translate TTS (The Stable Way)
+        // FINAL RESORT: Google Translate TTS
         if (!ttsSuccess) {
             try {
                 const fallback = await fetchTranslateTTSFallback(translatedText, selectedLang);
                 audioData = fallback.audioData;
                 mimeType = fallback.mimeType;
                 ttsSuccess = true;
-                console.log("[API/SPEAK] Final Fallback SUCCESS.");
+                console.log("[API/SPEAK] v12.0 Translate TTS Fallback Success.");
             } catch (err) {
                 console.error("[API/SPEAK] All TTS methods failed.");
             }
         }
 
-        if (!ttsSuccess) throw new Error("Could not generate audio.");
+        if (!ttsSuccess) throw new Error("Audio generation failed on all pipelines.");
 
         return res.status(200).json({
             text: translatedText,

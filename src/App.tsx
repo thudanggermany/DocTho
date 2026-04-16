@@ -622,6 +622,13 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        {/* Deployment Version Marker */}
+        <div className="max-w-4xl mx-auto px-4 mt-8 pb-8 text-center">
+            <p className="text-gray-500 text-sm font-mono">
+                System Interface v12.0 | Endpoint: /api/speak | Status: Active
+            </p>
+        </div>
       </main>
 
       {/* Footer */}
