@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export default async function handler(req, res) {
     const apiKey = process.env.VITE_GEMINI_API_KEY;
@@ -31,7 +31,7 @@ export default async function handler(req, res) {
             return res.status(500).json({ error: 'VITE_GEMINI_API_KEY is not defined in the environment.' });
         }
 
-        const genAI = new GoogleGenAI(apiKey);
+        const genAI = new GoogleGenerativeAI(apiKey);
 
         const langNames = {
             'vi': 'Vietnamese',
@@ -112,7 +112,8 @@ export default async function handler(req, res) {
             };
         }
 
-        const result = await model.generateContent([promptText], { generationConfig });
+        const model = genAI.getGenerativeModel({ model: ttsModelName, generationConfig });
+        const result = await model.generateContent(promptText);
         const response = result.response;
         const audioPart = response.candidates[0].content.parts.find(p => p.inlineData?.data);
         
