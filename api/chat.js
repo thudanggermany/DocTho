@@ -3,44 +3,35 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import express from 'express';
-import dotenv from 'dotenv';
-import { GoogleGenAI, Modality } from "@google/genai";
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { GoogleGenAI } from "@google/genai";
 
-dotenv.config();
+export default async function handler(req, res) {
+    const apiKey = process.env.VITE_GEMINI_API_KEY;
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+    // Handle Health Check
+    if (req.method === 'GET') {
+        return res.status(200).json({ 
+            status: 'ok', 
+            apiConnected: !!apiKey 
+        });
+    }
 
-const app = express();
-const port = process.env.PORT || 8080;
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method Not Allowed' });
+    }
 
-app.use(express.json());
-
-// Serve static files from the React app build folder
-const distPath = path.join(__dirname, '../dist');
-app.use(express.static(distPath));
-
-const apiKey = process.env.GEMINI_API_KEY;
-
-if (!apiKey) {
-    console.error('ERROR: GEMINI_API_KEY is not defined in the environment.');
-}
-
-const genAI = new GoogleGenAI({ apiKey });
-
-// Helper for Base64 to Blob conversion if needed, 
-// but here we just pass the data back to the frontend.
-
-app.post('/api/generate', async (req, res) => {
     try {
         const { text, selectedLang, voiceCount, selectedVoiceIds, selectedConfigs, isPoetryVoice } = req.body;
 
         if (!text) {
             return res.status(400).json({ error: 'Text is required' });
         }
+
+        if (!apiKey) {
+            return res.status(500).json({ error: 'VITE_GEMINI_API_KEY is not defined in the environment.' });
+        }
+
+        const genAI = new GoogleGenAI(apiKey);
 
         const langNames = {
             'vi': 'Vietnamese',
@@ -83,7 +74,8 @@ app.post('/api/generate', async (req, res) => {
         textToRead = translationResponse.response.text().trim();
 
         // Step 2: Generate TTS
-        const ttsModelName = "gemini-2.0-flash-exp"; // Using a stable flash model or experimental TTS
+        // Note: Using stable model name
+        const ttsModelName = "gemini-2.0-flash-exp"; 
         const model = genAI.getGenerativeModel({ model: ttsModelName });
 
         let promptText = `Read the following ${targetLang} ${isPoetryVoice ? 'poetry' : 'text'} clearly: ${textToRead}`;
@@ -121,35 +113,21 @@ app.post('/api/generate', async (req, res) => {
         }
 
         const result = await model.generateContent([promptText], { generationConfig });
-        
         const response = result.response;
         const audioPart = response.candidates[0].content.parts.find(p => p.inlineData?.data);
         
         if (audioPart) {
-            res.json({
+            return res.status(200).json({
                 text: textToRead,
                 audioData: audioPart.inlineData.data,
                 mimeType: audioPart.inlineData.mimeType
             });
         } else {
-            res.status(500).json({ error: 'Failed to generate audio content' });
+            return res.status(500).json({ error: 'Failed to generate audio content' });
         }
 
     } catch (error) {
         console.error('API Error:', error);
-        res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: error.message });
     }
-});
-
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', apiConnected: !!apiKey });
-});
-
-// Handle React routing, return all requests to React app
-app.get('*', (req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
-});
-
-app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
-});
+}

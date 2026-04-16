@@ -106,7 +106,7 @@ export default function App() {
     setError(null);
     logDebug('Đang kiểm tra kết nối tới Backend API...');
     try {
-      const response = await fetch('/api/health');
+      const response = await fetch('/api/chat');
       const data = await response.json();
       
       if (data.status === 'ok') {
@@ -165,7 +165,7 @@ export default function App() {
       setIsTranslating(true);
       logDebug(`Đang gửi yêu cầu xử lý tới máy chủ...`);
 
-      const response = await fetch('/api/generate', {
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
