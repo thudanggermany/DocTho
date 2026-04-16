@@ -5,6 +5,9 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// Diagnostic: Log SDK availability
+console.log("[API/CHAT] SDK Load Check: GoogleGenerativeAI is", typeof GoogleGenerativeAI);
+
 export default async function handler(req, res) {
     const apiKey = process.env.VITE_GEMINI_API_KEY;
 
@@ -37,8 +40,16 @@ export default async function handler(req, res) {
         }
 
         const genAI = new GoogleGenerativeAI(apiKey);
-
-        const langNames = {
+        
+        // Diagnostic: Check for getGenerativeModel
+        console.log("[API/CHAT] genAI properties:", Object.keys(genAI));
+        if (typeof genAI.getGenerativeModel !== 'function') {
+            console.error("[API/CHAT] CRITICAL: getGenerativeModel is NOT a function on genAI!");
+            // Log what we actually got
+            console.error("[API/CHAT] genAI type:", typeof genAI);
+            console.error("[API/CHAT] genAI prototype methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(genAI)));
+            throw new Error("SDK Initialization Error: getGenerativeModel is missing. Please check library version.");
+        }
             'vi': 'Vietnamese',
             'de': 'German',
             'en': 'English'
