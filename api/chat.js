@@ -92,9 +92,9 @@ export default async function DocThoHandler(req, res) {
             throw new Error("SDK Method getGenerativeModel not found. This usually indicates an incorrect SDK version or import issue.");
         }
 
-        console.log(`[API/CHAT] Step 1: Translating to ${targetLang} (using v1)...`);
+        console.log(`[API/CHAT] Step 1: Translating to ${targetLang} (using gemini-1.5-flash on v1)...`);
         const translationModel = genAI.getGenerativeModel(
-            { model: "gemini-1.5-flash-latest" },
+            { model: "gemini-1.5-flash" },
             { apiVersion: "v1" }
         );
         const translationResult = await translationModel.generateContent(translationPrompt);
@@ -102,7 +102,7 @@ export default async function DocThoHandler(req, res) {
         console.log("[API/CHAT] Translation complete.");
 
         // Step 2: Generate TTS
-        const ttsModelName = "gemini-2.0-flash-exp"; 
+        const ttsModelName = "gemini-2.0-flash"; 
         
         let promptText = `Read the following ${targetLang} ${isPoetryVoice ? 'poetry' : 'text'} clearly: ${textToRead}`;
         if (isPoetryVoice) {
