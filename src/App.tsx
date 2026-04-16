@@ -163,7 +163,7 @@ export default function App() {
 
     try {
       setIsTranslating(true);
-      logDebug(`Đang gửi yêu cầu xử lý tới máy chủ...`);
+      logDebug(`Đang gửi yêu cầu dịch thuật tới máy chủ (GEMINI_API_KEY)...`);
 
       const response = await fetch('/api/speak', {
         method: 'POST',
@@ -173,10 +173,6 @@ export default function App() {
         body: JSON.stringify({
           text,
           selectedLang,
-          voiceCount,
-          selectedVoiceIds,
-          selectedConfigs: selectedConfigs.map(c => ({ base: c.base, id: c.id })),
-          isPoetryVoice: selectedConfigs.some(v => v.id.includes('Poetry'))
         }),
       });
 
@@ -189,27 +185,41 @@ export default function App() {
       
       setTranslatedText(data.text);
       setIsTranslating(false);
-      logDebug('Đã nhận dữ liệu từ máy chủ.');
+      logDebug('Đã nhận bản dịch từ máy chủ.');
 
-      if (data.audioData) {
-        logDebug('Đang xử lý dữ liệu âm thanh...');
-        const mimeType = data.mimeType || 'audio/mpeg';
-        const audioBlob = base64ToBlob(data.audioData, mimeType);
-        setAudioMimeType(audioBlob.type);
-        const url = URL.createObjectURL(audioBlob);
-        setAudioUrl(url);
-        logDebug(`Đã tạo URL âm thanh thành công.`);
+      // --- Web Speech API Implementation ---
+      if ('speechSynthesis' in window) {
+        logDebug('Đang chuẩn bị phát âm thanh qua trình duyệt (Web Speech API)...');
         
-        setTimeout(() => {
-          if (audioRef.current) {
-            audioRef.current.load();
-            audioRef.current.playbackRate = playbackSpeed;
-          }
-        }, 150);
+        // Dừng các âm thanh đang phát (nếu có)
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(data.text);
         
-        logDebug('--- Hoàn tất thành công ---');
+        // Thiết lập ngôn ngữ
+        utterance.lang = selectedLang === 'vi' ? 'vi-VN' : (selectedLang === 'de' ? 'de-DE' : 'en-US');
+        utterance.rate = playbackSpeed;
+
+        // Tìm giọng đọc phù hợp
+        const voices = window.speechSynthesis.getVoices();
+        const preferredVoice = voices.find(v => v.lang.startsWith(utterance.lang) && (v.name.includes('Google') || v.name.includes('Microsoft')));
+        if (preferredVoice) {
+          utterance.voice = preferredVoice;
+          logDebug(`Đã chọn giọng đọc: ${preferredVoice.name}`);
+        }
+
+        utterance.onstart = () => setIsPlaying(true);
+        utterance.onend = () => setIsPlaying(false);
+        utterance.onerror = (e) => {
+          console.error('Speech Synthesis Error:', e);
+          setIsPlaying(false);
+        };
+
+        window.speechSynthesis.speak(utterance);
+        logDebug('--- Hoàn tất thành công (Phát âm thanh trực tiếp) ---');
       } else {
-        throw new Error('Máy chủ không trả về dữ liệu âm thanh.');
+        logDebug('Trình duyệt không hỗ trợ Web Speech API.');
+        throw new Error('Trình duyệt của bạn không hỗ trợ tính năng phát âm thanh trực tiếp.');
       }
 
     } catch (err: any) {
@@ -626,7 +636,7 @@ export default function App() {
         {/* Deployment Version Marker */}
         <div className="max-w-4xl mx-auto px-4 mt-8 pb-8 text-center">
             <p className="text-gray-500 text-sm font-mono">
-                System Interface v12.0 | Endpoint: /api/speak | Status: Active
+                System Interface v13.0 | Engine: Web Speech API (FREE) | Key: GEMINI_API_KEY
             </p>
         </div>
       </main>
