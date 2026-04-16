@@ -165,7 +165,7 @@ export default function App() {
       setIsTranslating(true);
       logDebug(`Đang gửi yêu cầu xử lý tới máy chủ...`);
 
-      const response = await fetch('/api/chat', {
+      const response = await fetch('/api/speak', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
