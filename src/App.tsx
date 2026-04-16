@@ -165,7 +165,7 @@ export default function App() {
       setIsTranslating(true);
       logDebug(`Đang gửi yêu cầu dịch thuật tới máy chủ (GEMINI_API_KEY)...`);
 
-      const response = await fetch('/api/speak', {
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Deployment Marker: v13.0 (Web Speech Engine)
-// Target Endpoint: /api/speak
-console.log("[API/SPEAK] v13.0 (TRANSLATION ONLY) Initializing...");
+// Deployment Marker: v14.0 (Identity Restoration)
+// Target Endpoint: /api/chat
+console.log("[API/CHAT] v14.0 (RESTORED) Initializing...");
 
 /**
  * Robust Raw Fetch for Gemini Translation
@@ -28,21 +28,21 @@ async function fetchGeminiTranslation(model, version, key, prompt) {
     return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
 
-export default async function DocThoSpeakHandler(req, res) {
-    // Standardizing to GEMINI_API_KEY as requested
+export default async function DocThoChatHandler(req, res) {
+    // Explicitly using GEMINI_API_KEY as requested
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (req.method === 'GET') {
-        return res.status(200).json({ status: 'ok', version: '13.0', keyDetected: !!apiKey });
+        return res.status(200).json({ status: 'ok', version: '14.0', service: 'chat', keyDetected: !!apiKey });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-    console.log(`[API/SPEAK] v13.0 Translation Request Received.`);
+    console.log(`[API/CHAT] v14.0 Translation Request Received.`);
     
     if (!apiKey) {
-        console.error("[API/SPEAK] GEMINI_API_KEY is missing in environment variables.");
-        return res.status(401).json({ error: "GEMINI_API_KEY is missing on server. Check Vercel Dashboard." });
+        console.error("[API/CHAT] GEMINI_API_KEY is missing.");
+        return res.status(401).json({ error: "GEMINI_API_KEY missing on server." });
     }
 
     try {
@@ -52,26 +52,26 @@ export default async function DocThoSpeakHandler(req, res) {
         const langNames = { 'vi': 'Vietnamese', 'de': 'German', 'en': 'English' };
         const targetLang = langNames[selectedLang] || 'Vietnamese';
 
-        // Perform Translation only
-        const translationPrompt = `Translate the following to ${targetLang}. Return ONLY the translated text: ${text.trim()}`;
+        // Translation logic (Gemini)
+        const translationPrompt = `Translate to ${targetLang}. Return ONLY the translated text: ${text.trim()}`;
         let translatedText = text.trim();
         
         try {
             translatedText = await fetchGeminiTranslation("gemini-1.5-flash", "v1beta", apiKey, translationPrompt);
-            console.log("[API/SPEAK] v13.0 Translation SUCCESS.");
+            console.log("[API/CHAT] v14.0 Translation SUCCESS.");
         } catch (err) {
-            console.warn("[API/SPEAK] v13.0 Translation failed, returning original.");
+            console.warn("[API/CHAT] v14.0 Translation fallback.");
             translatedText = text.trim();
         }
 
-        // Return only the text. Frontend will handle the speaking.
+        // Return translated text. Audio handled by Web Speech API in frontend.
         return res.status(200).json({
             text: translatedText,
-            mode: 'WebSpeechAPI'
+            source: 'v14.0-Chat'
         });
 
     } catch (error) {
-        console.error('[API/SPEAK] FATAL ERROR:', error);
+        console.error('[API/CHAT] FATAL ERROR:', error);
         return res.status(500).json({ error: error.message });
     }
 }
