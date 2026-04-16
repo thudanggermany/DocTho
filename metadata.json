@@ -1,0 +1,5 @@
+{
+  "name": "Vietnamese Poetry & Text Reader",
+  "description": "An application to read Vietnamese text and poetry with various voices using Gemini TTS.",
+  "requestFramePermissions": []
+}
