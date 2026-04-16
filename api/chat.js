@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Deployment Marker: v16.0 (CapCut Poetic Engine)
+// Deployment Marker: v17.0 (Restored Original App with Gemini TTS)
 // Target Endpoint: /api/chat
-console.log("[API/CHAT] v16.0 (POETIC ENGINE) Initializing...");
+console.log("[API/CHAT] v17.0 (RESTORED ENGINE) Initializing...");
 
 import * as GoogleAI from "@google/generative-ai";
 const GoogleGenerativeAI = GoogleAI.GoogleGenerativeAI;
@@ -31,21 +31,11 @@ async function fetchGeminiTranslation(model, version, key, prompt) {
     return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
 
-/**
- * Poetic Word-by-Word Processor
- * Injects pauses (commas) between words to create a rhythmic "recital" effect.
- */
-function processPoeticText(text) {
-    // Split by whitespace and rejoin with commas and spaces
-    // This forces the TTS engine to pause briefly between each word.
-    return text.trim().split(/\s+/).join(", ") + ".";
-}
-
 export default async function DocThoChatHandler(req, res) {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (req.method === 'GET') {
-        return res.status(200).json({ status: 'ok', version: '16.0', specialized: 'CapCut Poetic' });
+        return res.status(200).json({ status: 'ok', version: '17.0', description: 'Restored Original App' });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -76,10 +66,9 @@ export default async function DocThoChatHandler(req, res) {
         }
 
         // ---------------------------------------------------------
-        // STEP 2: POETIC TTS (GEMINI AUDIO)
+        // STEP 2: NATURAL TTS (GEMINI AUDIO)
         // ---------------------------------------------------------
-        const rhythmicText = processPoeticText(translatedText);
-        console.log(`[API/CHAT] Rhythmic Processing: ${rhythmicText.substring(0, 50)}...`);
+        console.log(`[API/CHAT] Generating Natural Audio...`);
 
         const genAI = new GoogleGenerativeAI(apiKey);
         const generationConfig = {
@@ -90,21 +79,23 @@ export default async function DocThoChatHandler(req, res) {
         };
 
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", generationConfig }, { apiVersion: "v1beta" });
-        const result = await model.generateContent(`Read this text naturally with a poetic rhythm: ${rhythmicText}`);
+        
+        // We prompt the model to read naturally, NOT with pauses.
+        const result = await model.generateContent(`Read this text naturally with a pleasant tone: ${translatedText}`);
         
         const part = result.response.candidates[0].content.parts.find(p => p.inlineData?.data);
         if (!part) throw new Error("Could not generate audio content.");
 
-        // Return both text and the binary audio for CapCut usage
+        // Return format expected by App.tsx v10.0
         return res.status(200).json({
             text: translatedText,
             audioData: part.inlineData.data,
             mimeType: part.inlineData.mimeType,
-            engine: 'Gemini-Poetic-v16'
+            engine: 'Gemini-TTS-v17'
         });
 
     } catch (error) {
         console.error('[API/CHAT] FATAL ERROR:', error);
-        return res.status(500).json({ error: `v16.0 Error: ${error.message}` });
+        return res.status(500).json({ error: `v17.0 Error: ${error.message}` });
     }
 }
