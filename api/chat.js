@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Deployment Marker: v7.0 (FORCE)
-// Build Timestamp: 2026-04-16T10:15:00Z
-console.log("[API/CHAT] v7.0 (FORCE) Initializing forced clean deployment...");
+// Deployment Marker: v8.0 (Audio Fix)
+// Build Timestamp: 2026-04-16T12:15:00Z
+console.log("[API/CHAT] v8.0 (Audio Fix) Initializing...");
 
 import * as GoogleAI from "@google/generative-ai";
 const GoogleGenerativeAI = GoogleAI.GoogleGenerativeAI;
@@ -85,11 +85,12 @@ export default async function DocThoFinalHandler(req, res) {
         // ---------------------------------------------------------
         // STEP 2: TTS (SDK)
         // ---------------------------------------------------------
-        console.log("[API/CHAT] v7.0 Step 2: TTS with SDK...");
+        console.log("[API/CHAT] v8.0 Step 2: TTS with SDK...");
         const genAI = new GoogleGenerativeAI(apiKey);
         
         let audioData = null;
         let mimeType = null;
+        let ttsSuccess = false;
 
         const generationConfig = {
             responseModalities: ["AUDIO"],
@@ -98,19 +99,28 @@ export default async function DocThoFinalHandler(req, res) {
             },
         };
 
-        try {
-            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash", generationConfig }, { apiVersion: "v1beta" });
-            const result = await model.generateContent(`Read this text: ${translatedText}`);
-            const part = result.response.candidates[0].content.parts.find(p => p.inlineData?.data);
-            if (part) {
-                audioData = part.inlineData.data;
-                mimeType = part.inlineData.mimeType;
-                console.log("[API/CHAT] v7.0 TTS SUCCESS.");
+        const ttsModels = ["gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-1.5-pro"];
+
+        for (const modelName of ttsModels) {
+            try {
+                console.log(`[API/CHAT] v8.0 Trying TTS with ${modelName} on v1beta...`);
+                const model = genAI.getGenerativeModel({ model: modelName, generationConfig }, { apiVersion: "v1beta" });
+                const result = await model.generateContent(`Read this text: ${translatedText}`);
+                const part = result.response.candidates[0].content.parts.find(p => p.inlineData?.data);
+                if (part) {
+                    audioData = part.inlineData.data;
+                    mimeType = part.inlineData.mimeType;
+                    ttsSuccess = true;
+                    console.log(`[API/CHAT] v8.0 TTS SUCCESS with ${modelName}!`);
+                    break;
+                }
+            } catch (err) {
+                console.warn(`[API/CHAT] v8.0 TTS ${modelName} failed: ${err.message}`);
+                continue;
             }
-        } catch (err) {
-            console.error("[API/CHAT] v7.0 TTS FAILED:", err.message);
-            throw new Error(`TTS Failed: ${err.message}`);
         }
+
+        if (!ttsSuccess) throw new Error("CRITICAL: All TTS model combinations failed.");
 
         return res.status(200).json({
             text: translatedText,
