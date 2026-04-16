@@ -3,18 +3,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
+// Deployment Marker: v3.0 (Ensuring latest code is running on Vercel)
+console.log("[API/CHAT] Initializing DocTho Backend v3.0...");
 
-// Diagnostic: Log SDK availability
-console.log("[API/CHAT] SDK Load Check: GoogleGenerativeAI is", typeof GoogleGenerativeAI);
+import * as GoogleAI from "@google/generative-ai";
 
-export default async function handler(req, res) {
+// Robust class extraction
+const GoogleGenerativeAI = GoogleAI.GoogleGenerativeAI;
+
+export default async function DocThoHandler(req, res) {
     const apiKey = process.env.VITE_GEMINI_API_KEY;
 
     // Handle Health Check
     if (req.method === 'GET') {
         return res.status(200).json({ 
             status: 'ok', 
+            version: '3.0',
             apiConnected: !!apiKey 
         });
     }
@@ -24,7 +28,7 @@ export default async function handler(req, res) {
     }
 
     // DEBUG: Log incoming request body
-    console.log("[API/CHAT] Incoming POST request. Body:", JSON.stringify(req.body));
+    console.log("[API/CHAT] v3.0 Incoming POST request. Body Keys:", Object.keys(req.body || {}));
 
     try {
         const { text, selectedLang, voiceCount, selectedVoiceIds, selectedConfigs, isPoetryVoice } = req.body;
@@ -39,18 +43,11 @@ export default async function handler(req, res) {
             return res.status(500).json({ error: 'VITE_GEMINI_API_KEY is not defined in the environment.' });
         }
 
+        console.log("[API/CHAT] Creating GoogleGenerativeAI instance...");
         const genAI = new GoogleGenerativeAI(apiKey);
         
-        // Diagnostic: Check for getGenerativeModel
-        console.log("[API/CHAT] SDK API Key check (masked):", apiKey ? apiKey.substring(0, 6) + "..." : "EMPTY");
-        console.log("[API/CHAT] genAI properties:", Object.keys(genAI));
-        if (typeof genAI.getGenerativeModel !== 'function') {
-            console.error("[API/CHAT] CRITICAL: getGenerativeModel is NOT a function on genAI!");
-            // Log what we actually got
-            console.error("[API/CHAT] genAI type:", typeof genAI);
-            console.error("[API/CHAT] genAI prototype methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(genAI)));
-            throw new Error("SDK Initialization Error: getGenerativeModel is missing. Please check library version.");
-        }
+        // Diagnostic: Masked Key Check
+        console.log("[API/CHAT] API Key (masked):", apiKey.substring(0, 6) + "...");
 
         const langNames = {
             'vi': 'Vietnamese',
@@ -89,10 +86,16 @@ export default async function handler(req, res) {
             Input Text: ${text.trim()}`;
         }
 
+        if (typeof genAI.getGenerativeModel !== 'function') {
+            console.error("[API/CHAT] CRITICAL: genAI.getGenerativeModel is NOT a function!", typeof genAI.getGenerativeModel);
+            console.log("[API/CHAT] genAI Keys:", Object.keys(genAI));
+            throw new Error("SDK Method getGenerativeModel not found. This usually indicates an incorrect SDK version or import issue.");
+        }
+
         const translationModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const translationResponse = await translationModel.generateContent(translationPrompt);
-        textToRead = translationResponse.response.text().trim();
-        console.log("[API/CHAT] Translation/Scripting complete.");
+        const translationResult = await translationModel.generateContent(translationPrompt);
+        textToRead = translationResult.response.text().trim();
+        console.log("[API/CHAT] Translation complete.");
 
         // Step 2: Generate TTS
         const ttsModelName = "gemini-2.0-flash-exp"; 
@@ -131,28 +134,26 @@ export default async function handler(req, res) {
             };
         }
 
-        console.log(`[API/CHAT] Step 2: Generating Audio with model ${ttsModelName}...`);
+        console.log(`[API/CHAT] Step 2: Generating Audio with ${ttsModelName}...`);
         const ttsModel = genAI.getGenerativeModel({ model: ttsModelName, generationConfig });
-        const result = await ttsModel.generateContent(promptText);
-        const response = result.response;
-        const audioPart = response.candidates[0].content.parts.find(p => p.inlineData?.data);
+        const ttsResult = await ttsModel.generateContent(promptText);
+        const ttsResponse = ttsResult.response;
+        const audioPart = ttsResponse.candidates[0].content.parts.find(p => p.inlineData?.data);
         
         if (audioPart) {
-            console.log("[API/CHAT] Audio generated successfully.");
+            console.log("[API/CHAT] Audio Generation SUCCESS.");
             return res.status(200).json({
                 text: textToRead,
                 audioData: audioPart.inlineData.data,
                 mimeType: audioPart.inlineData.mimeType
             });
         } else {
-            console.error("[API/CHAT] No audio data found in AI response.");
-            return res.status(500).json({ error: 'Failed to generate audio content' });
+            console.error("[API/CHAT] Failed: No audio data in response parts.");
+            return res.status(500).json({ error: 'AI failed to return audio content.' });
         }
 
     } catch (error) {
-        // DETAILED ERROR LOGGING
-        console.error('[API/CHAT] DETAILED ERROR:', error);
-        console.error('[API/CHAT] Error Stack:', error.stack);
-        return res.status(500).json({ error: error.message || 'Unknown Server Error' });
+        console.error('[API/CHAT] [v3.0] ERROR EXCEPTION:', error);
+        return res.status(500).json({ error: error.message || 'Internal Server Error' });
     }
 }
